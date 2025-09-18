@@ -9,7 +9,7 @@ import plotly.graph_objects as go
 import math
 
 st.set_page_config(page_title="PV Halter Wirtschaftlichkeit (Plotly)", layout="wide")
-st.title("📊 Wirtschaftlichkeitsanalyse – PV-Modulhalter (Plotly, ohne PDF)")
+st.title("📊 Wirtschaftlichkeitsanalyse – PV-Modulhalter Qrauts AG 2025")
 
 # ---------- Inputs ----------
 st.markdown("### 1) Detailkosten & Verkaufspreis-Konfiguration")
