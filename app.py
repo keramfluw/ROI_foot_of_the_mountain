@@ -7,10 +7,31 @@ from fpdf import FPDF
 from openpyxl import Workbook
 from openpyxl.utils.dataframe import dataframe_to_rows
 import plotly.graph_objects as go
+import math
 
 st.set_page_config(page_title="PV Halter Wirtschaftlichkeit (Plotly)", layout="wide")
-st.title("📊 Wirtschaftlichkeitsanalyse – PV-Modulhalter Qrauts AG")
+st.title("📊 Wirtschaftlichkeitsanalyse – PV-Modulhalter (Plotly, PDF-Fix)")
 
+# ---------- Helpers ----------
+def ensure_latin1(text):
+    if text is None:
+        return ""
+    if not isinstance(text, str):
+        text = str(text)
+    # Replace common Unicode chars that break fpdf (latin-1) – esp. Euro sign
+    text = text.replace("€", " EUR ")
+    # Fallback: strip any remaining non-latin1 characters
+    return text.encode("latin-1", "ignore").decode("latin-1")
+
+def safe_num(x, ndigits=2):
+    if x is None or (isinstance(x, float) and (math.isnan(x) or math.isinf(x))):
+        return ""
+    try:
+        return f"{float(x):.{ndigits}f}"
+    except Exception:
+        return ensure_latin1(x)
+
+# ---------- Inputs ----------
 st.markdown("### 1) Detailkosten & Verkaufspreis-Konfiguration")
 
 def kosten_eingabe(titel, prefix):
@@ -53,7 +74,7 @@ with col2:
 max_stück = st.slider("Maximale Stückzahl", 100, 5000, 2000, step=100)
 x = np.arange(1, max_stück + 1)
 
-# Rechenlogik
+# ---------- Calculation ----------
 erlös_beton = x * vk_beton
 erlös_recyc = x * vk_recyc
 aufwand_beton = fix_beton + x * var_beton
@@ -78,7 +99,6 @@ def find_zero_crossing_x(x, y):
 def find_intersection_x(x, y1, y2):
     return find_zero_crossing_x(x, y1 - y2)
 
-# Schnittpunkte
 be_beton_x = find_zero_crossing_x(x, gewinn_beton)
 be_recyc_x = find_zero_crossing_x(x, gewinn_recyc)
 gain_intersect_x = find_intersection_x(x, gewinn_beton, gewinn_recyc)
@@ -88,18 +108,17 @@ roi_recyc_zero_x = find_zero_crossing_x(x, roi_recyc)
 def interp(xq, x, y):
     return float(np.interp(xq, x, y)) if xq is not None else None
 
-# Plotly: Gewinn/Break-Even
+# ---------- Charts (Plotly) ----------
 st.markdown("### 3) Ergebnisse & Diagramme")
 st.subheader("Break-Even & Gewinnvergleich (interaktiv)")
-
+import plotly.graph_objects as go
 fig_gain = go.Figure()
 fig_gain.add_trace(go.Scatter(x=x, y=gewinn_beton, mode="lines", name="Gewinn Beton",
-                              hovertemplate="Stückzahl: %{x}<br>Gewinn: %{y:.2f} €<extra></extra>"))
+                              hovertemplate="Stückzahl: %{x}<br>Gewinn: %{y:.2f} EUR<extra></extra>"))
 fig_gain.add_trace(go.Scatter(x=x, y=gewinn_recyc, mode="lines", name="Gewinn Recycling",
-                              hovertemplate="Stückzahl: %{x}<br>Gewinn: %{y:.2f} €<extra></extra>"))
+                              hovertemplate="Stückzahl: %{x}<br>Gewinn: %{y:.2f} EUR<extra></extra>"))
 fig_gain.add_hline(y=0, line_dash="dash", opacity=0.6)
 
-# Annotations/Marker
 points = []
 if be_beton_x is not None:
     points.append(("Break-Even Beton", be_beton_x, interp(be_beton_x, x, gewinn_beton)))
@@ -111,20 +130,19 @@ if gain_intersect_x is not None:
 for label, px, py in points:
     fig_gain.add_trace(go.Scatter(
         x=[px], y=[py], mode="markers+text", name=label,
-        text=[f"{label}<br>Stk≈{px:.0f}, Wert≈{py:.0f} €"],
+        text=[f"{label}<br>Stk≈{px:.0f}, Wert≈{py:.0f} EUR"],
         textposition="top center",
-        hovertemplate=f"{label}<br>Stückzahl: %{{x:.2f}}<br>Wert: %{{y:.2f}} €<extra></extra>"
+        hovertemplate=f"{label}<br>Stückzahl: %{{x:.2f}}<br>Wert: %{{y:.2f}} EUR<extra></extra>"
     ))
 
 fig_gain.update_layout(
     xaxis_title="Stückzahl",
-    yaxis_title="Gewinn (€)",
+    yaxis_title="Gewinn (EUR)",
     hovermode="x unified",
     margin=dict(l=40, r=20, t=40, b=40)
 )
 st.plotly_chart(fig_gain, use_container_width=True)
 
-# Plotly: ROI
 st.subheader("ROI Verlauf (interaktiv)")
 fig_roi = go.Figure()
 fig_roi.add_trace(go.Scatter(x=x, y=roi_beton, mode="lines", name="ROI Beton",
@@ -155,23 +173,27 @@ fig_roi.update_layout(
 )
 st.plotly_chart(fig_roi, use_container_width=True)
 
-# Datentabelle
+# ---------- Data Table ----------
 df = pd.DataFrame({
     "Stückzahl": x,
-    "Gewinn Beton (€)": gewinn_beton,
-    "Gewinn Recycling (€)": gewinn_recyc,
+    "Gewinn Beton (EUR)": gewinn_beton,
+    "Gewinn Recycling (EUR)": gewinn_recyc,
     "ROI Beton": roi_beton,
     "ROI Recycling": roi_recyc
 })
 if st.checkbox("📋 Tabelle anzeigen"):
     st.dataframe(df)
 
-# Exportfunktionen
+# ---------- Export ----------
 def to_excel(df):
     wb = Workbook()
     ws = wb.active
     ws.title = "Wirtschaftlichkeit"
-    for r in dataframe_to_rows(df, index=False, header=True):
+    # Ensure column names ASCII-friendly for Excel too
+    cols = [c.replace("€", "EUR") for c in df.columns]
+    df_x = df.copy()
+    df_x.columns = cols
+    for r in dataframe_to_rows(df_x, index=False, header=True):
         ws.append(r)
     bio = BytesIO()
     wb.save(bio)
@@ -179,23 +201,31 @@ def to_excel(df):
     return bio
 
 def to_pdf(df):
-    pdf = FPDF()
+    pdf = FPDF(orientation="P", unit="mm", format="A4")
     pdf.add_page()
-    pdf.set_font("Arial", size=10)
-    pdf.cell(200, 10, txt="Wirtschaftlichkeitsanalyse PV Modulhalter", ln=1, align="C")
-    pdf.set_font("Arial", size=8)
-    col_names = list(df.columns)
-    col_width = 200 / len(col_names)
+    pdf.set_auto_page_break(auto=True, margin=12)
+    pdf.set_font("Arial", size=11)
+    pdf.cell(0, 8, ensure_latin1("Wirtschaftlichkeitsanalyse PV-Modulhalter"), ln=1, align="C")
+    pdf.ln(2)
+    # Prepare headers & rows (latin-1 safe)
+    col_names = [ensure_latin1(c.replace("€", "EUR")) for c in df.columns]
+    ncols = len(col_names)
+    page_width = 210 - 2*10  # A4 width minus margins
+    col_width = page_width / ncols
+    # Header
+    pdf.set_font("Arial", "B", 9)
     for col in col_names:
-        pdf.cell(col_width, 8, col, border=1)
+        pdf.cell(col_width, 8, col, border=1, align="C")
     pdf.ln()
-    max_rows = min(len(df), 50)
+    pdf.set_font("Arial", size=8)
+    max_rows = min(len(df), 80)
     for _, row in df.head(max_rows).iterrows():
         for item in row:
-            try:
-                pdf.cell(col_width, 8, f"{float(item):.2f}", border=1)
-            except:
-                pdf.cell(col_width, 8, str(item), border=1)
+            if isinstance(item, (int, float, np.floating)):
+                cell_text = safe_num(item)
+            else:
+                cell_text = ensure_latin1(item)
+            pdf.cell(col_width, 6, cell_text, border=1)
         pdf.ln()
     bio = BytesIO()
     pdf.output(bio)
