@@ -1,8 +1,6 @@
-# PV Halter Wirtschaftlichkeitsanalyse – Plotly (PDF Fix)
+# PV Halter Wirtschaftlichkeitsanalyse – Plotly (ohne PDF)
 
-Diese Version ersetzt nicht-lateinische Zeichen (z. B. „€“) in der PDF-Ausgabe,
-damit FPDF ohne Unicode-TrueType-Font funktioniert. Optional kann später ein
-TTF-Font (z. B. DejaVuSans) eingebunden werden, um vollständiges Unicode zu erlauben.
+Diese Version entfernt den PDF-Export. Excel-Export bleibt erhalten.
 
 ## Start
 ```bash

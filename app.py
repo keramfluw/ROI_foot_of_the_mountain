@@ -3,33 +3,13 @@ import streamlit as st
 import numpy as np
 import pandas as pd
 from io import BytesIO
-from fpdf import FPDF
 from openpyxl import Workbook
 from openpyxl.utils.dataframe import dataframe_to_rows
 import plotly.graph_objects as go
 import math
 
 st.set_page_config(page_title="PV Halter Wirtschaftlichkeit (Plotly)", layout="wide")
-st.title("📊 Wirtschaftlichkeitsanalyse – PV-Modulhalter (Plotly, PDF-Fix)")
-
-# ---------- Helpers ----------
-def ensure_latin1(text):
-    if text is None:
-        return ""
-    if not isinstance(text, str):
-        text = str(text)
-    # Replace common Unicode chars that break fpdf (latin-1) – esp. Euro sign
-    text = text.replace("€", " EUR ")
-    # Fallback: strip any remaining non-latin1 characters
-    return text.encode("latin-1", "ignore").decode("latin-1")
-
-def safe_num(x, ndigits=2):
-    if x is None or (isinstance(x, float) and (math.isnan(x) or math.isinf(x))):
-        return ""
-    try:
-        return f"{float(x):.{ndigits}f}"
-    except Exception:
-        return ensure_latin1(x)
+st.title("📊 Wirtschaftlichkeitsanalyse – PV-Modulhalter (Plotly, ohne PDF)")
 
 # ---------- Inputs ----------
 st.markdown("### 1) Detailkosten & Verkaufspreis-Konfiguration")
@@ -111,7 +91,7 @@ def interp(xq, x, y):
 # ---------- Charts (Plotly) ----------
 st.markdown("### 3) Ergebnisse & Diagramme")
 st.subheader("Break-Even & Gewinnvergleich (interaktiv)")
-import plotly.graph_objects as go
+
 fig_gain = go.Figure()
 fig_gain.add_trace(go.Scatter(x=x, y=gewinn_beton, mode="lines", name="Gewinn Beton",
                               hovertemplate="Stückzahl: %{x}<br>Gewinn: %{y:.2f} EUR<extra></extra>"))
@@ -184,12 +164,11 @@ df = pd.DataFrame({
 if st.checkbox("📋 Tabelle anzeigen"):
     st.dataframe(df)
 
-# ---------- Export ----------
+# ---------- Export (Excel only) ----------
 def to_excel(df):
     wb = Workbook()
     ws = wb.active
     ws.title = "Wirtschaftlichkeit"
-    # Ensure column names ASCII-friendly for Excel too
     cols = [c.replace("€", "EUR") for c in df.columns]
     df_x = df.copy()
     df_x.columns = cols
@@ -200,44 +179,6 @@ def to_excel(df):
     bio.seek(0)
     return bio
 
-def to_pdf(df):
-    pdf = FPDF(orientation="P", unit="mm", format="A4")
-    pdf.add_page()
-    pdf.set_auto_page_break(auto=True, margin=12)
-    pdf.set_font("Arial", size=11)
-    pdf.cell(0, 8, ensure_latin1("Wirtschaftlichkeitsanalyse PV-Modulhalter"), ln=1, align="C")
-    pdf.ln(2)
-    # Prepare headers & rows (latin-1 safe)
-    col_names = [ensure_latin1(c.replace("€", "EUR")) for c in df.columns]
-    ncols = len(col_names)
-    page_width = 210 - 2*10  # A4 width minus margins
-    col_width = page_width / ncols
-    # Header
-    pdf.set_font("Arial", "B", 9)
-    for col in col_names:
-        pdf.cell(col_width, 8, col, border=1, align="C")
-    pdf.ln()
-    pdf.set_font("Arial", size=8)
-    max_rows = min(len(df), 80)
-    for _, row in df.head(max_rows).iterrows():
-        for item in row:
-            if isinstance(item, (int, float, np.floating)):
-                cell_text = safe_num(item)
-            else:
-                cell_text = ensure_latin1(item)
-            pdf.cell(col_width, 6, cell_text, border=1)
-        pdf.ln()
-    bio = BytesIO()
-    pdf.output(bio)
-    bio.seek(0)
-    return bio
-
 st.markdown("### 4) 📤 Export")
-col3, col4 = st.columns(2)
-with col3:
-    excel_bytes = to_excel(df)
-    st.download_button("📥 Excel herunterladen", data=excel_bytes, file_name="wirtschaftlichkeit_pvhalter.xlsx")
-
-with col4:
-    pdf_bytes = to_pdf(df)
-    st.download_button("📥 PDF herunterladen", data=pdf_bytes, file_name="wirtschaftlichkeit_pvhalter.pdf")
+excel_bytes = to_excel(df)
+st.download_button("📥 Excel herunterladen", data=excel_bytes, file_name="wirtschaftlichkeit_pvhalter.xlsx")
