@@ -9,7 +9,7 @@ from openpyxl.utils.dataframe import dataframe_to_rows
 import plotly.graph_objects as go
 
 st.set_page_config(page_title="PV Halter Wirtschaftlichkeit (Plotly)", layout="wide")
-st.title("📊 Wirtschaftlichkeitsanalyse – PV-Modulhalter (Plotly)")
+st.title("📊 Wirtschaftlichkeitsanalyse – PV-Modulhalter Qrauts AG")
 
 st.markdown("### 1) Detailkosten & Verkaufspreis-Konfiguration")
 
