@@ -68,13 +68,56 @@ gewinn_recyc = erlös_recyc - aufwand_recyc
 roi_beton = (gewinn_beton) / np.where(aufwand_beton != 0, aufwand_beton, np.nan)
 roi_recyc = (gewinn_recyc) / np.where(aufwand_recyc != 0, aufwand_recyc, np.nan)
 
+def find_zero_crossing_x(x, y):
+    \"\"\"Linear interpolated x where curve y crosses 0. Returns None if no crossing.\"\"\"
+    sign = np.sign(y)
+    idx = np.where(np.diff(sign) != 0)[0]
+    if len(idx) == 0:
+        return None
+    i = idx[0]
+    x0, x1 = x[i], x[i+1]
+    y0, y1 = y[i], y[i+1]
+    if (y1 - y0) == 0:
+        return float(x0)
+    xz = x0 - y0 * (x1 - x0) / (y1 - y0)
+    return float(xz)
+
+def find_intersection_x(x, y1, y2):
+    \"\"\"Linear interpolated x where y1-y2 crosses 0.\"\"\"
+    diff = y1 - y2
+    return find_zero_crossing_x(x, diff)
+
+# Schnittpunkte berechnen
+be_beton_x = find_zero_crossing_x(stückzahlen, gewinn_beton)
+be_recyc_x = find_zero_crossing_x(stückzahlen, gewinn_recyc)
+gain_intersect_x = find_intersection_x(stückzahlen, gewinn_beton, gewinn_recyc)
+
+roi_beton_zero_x = find_zero_crossing_x(stückzahlen, roi_beton)
+roi_recyc_zero_x = find_zero_crossing_x(stückzahlen, roi_recyc)
+
 # Diagramme
 st.markdown("### 3. Ergebnisse & Diagramme")
 st.subheader("Break-Even & Gewinnvergleich")
 fig1, ax1 = plt.subplots()
 ax1.plot(stückzahlen, gewinn_beton, label="Gewinn Beton")
 ax1.plot(stückzahlen, gewinn_recyc, label="Gewinn Recycling")
-ax1.axhline(0, color="black", linestyle="--", linewidth=0.8)
+ax1.axhline(0, linestyle="--", linewidth=0.8)
+
+# Schnittpunkte markieren & beschriften
+def annotate_point(ax, x_val, y_func, label):
+    if x_val is not None and x_val >= stückzahlen[0] and x_val <= stückzahlen[-1]:
+        y_val = np.interp(x_val, stückzahlen, y_func)
+        ax.scatter([x_val], [y_val])
+        ax.annotate(f\"{label}\nStk≈{x_val:.0f}, Wert≈{y_val:.0f} €\",
+                    xy=(x_val, y_val),
+                    xytext=(10, 15),
+                    textcoords=\"offset points\",
+                    arrowprops=dict(arrowstyle=\"->\"))
+
+annotate_point(ax1, be_beton_x, gewinn_beton, "Break-Even Beton")
+annotate_point(ax1, be_recyc_x, gewinn_recyc, "Break-Even Recycling")
+annotate_point(ax1, gain_intersect_x, gewinn_beton, "Schnitt Gewinnkurven")
+
 ax1.set_xlabel("Stückzahl")
 ax1.set_ylabel("Gewinn (€)")
 ax1.set_title("Break-Even Kurve")
@@ -86,7 +129,11 @@ st.subheader("ROI Vergleich")
 fig2, ax2 = plt.subplots()
 ax2.plot(stückzahlen, roi_beton, label="ROI Beton")
 ax2.plot(stückzahlen, roi_recyc, label="ROI Recycling")
-ax2.axhline(0, color="black", linestyle="--", linewidth=0.8)
+ax2.axhline(0, linestyle="--", linewidth=0.8)
+
+annotate_point(ax2, roi_beton_zero_x, roi_beton, "ROI=0 Beton")
+annotate_point(ax2, roi_recyc_zero_x, roi_recyc, "ROI=0 Recycling")
+
 ax2.set_xlabel("Stückzahl")
 ax2.set_ylabel("ROI")
 ax2.set_title("ROI Verlauf")
@@ -128,9 +175,13 @@ def to_pdf(df):
     for col in col_names:
         pdf.cell(col_width, 8, col, border=1)
     pdf.ln()
-    for index, row in df.iterrows():
+    max_rows = min(len(df), 50)
+    for index, row in df.head(max_rows).iterrows():
         for item in row:
-            pdf.cell(col_width, 8, f"{item:.2f}", border=1)
+            try:
+                pdf.cell(col_width, 8, f"{float(item):.2f}", border=1)
+            except:
+                pdf.cell(col_width, 8, str(item), border=1)
         pdf.ln()
     bio = BytesIO()
     pdf.output(bio)
